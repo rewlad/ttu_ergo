@@ -22,6 +22,7 @@ def dict2lev_set(d,k0,k1,v):
 ################################################################################
 
 def read_csv(fn,formats,res):
+    #print fn
     def split_row_by_empty_cells(row):
         groups = []
         curr_group = None
@@ -92,6 +93,17 @@ def fill_capt_index(formats):
 ################################################################################
 
 def month_start(dt): return dt.replace(day=1)
+def prev_month_end(dt): return month_start(dt) - date.resolution
+
+def sum_for_prev_months(dt,n,f):
+    if n <= 0 : return 0; 
+    pdt = prev_month_end(dt)
+    return f(pdt) + sum_for_prev_months(pdt,n-1,f)
+
+def sum_for_month_days(dt,f):
+    """ for days 1..dt.day """
+    pdt = dt - date.resolution
+    return f(dt) + ( sum_for_month_days(pdt,f) if dt.month == pdt.month else 0 )
 
 ################################################################################
 
@@ -130,7 +142,9 @@ class reward_keeper:
 class employee_rewards:
     def __init__(self): self.mon2reward = dict()
     def get_month_hired(self,dt): return month_start(dt) in self.mon2reward
-    def get_month_reward(self,dt): return self.mon2reward[month_start(dt)]
+    def get_month_reward(self,dt):
+        if self.get_month_hired(dt): return self.mon2reward[month_start(dt)]
+        else: return 0
     def set_month_reward(self,dt,v): self.mon2reward[month_start(dt)] = v
     
 class employee_absences:
@@ -174,6 +188,32 @@ def fill_formats(formats):
 
 ################################################################################
 
+def calc_absence_upkeep_for_employee(holiday,employee,rewards,absences):
+    def reward_for_prev_6_months(dt):
+        get_month_reward = rewards.get_month_reward
+        return sum_for_prev_months( date_from, 6, get_month_reward )
+    
+    def is_calwork_day_01(dt):
+        if holiday.is_free_day(dt): return 0
+        if absences.is_free_day(dt): return 0
+        return 1
+    def sum_month_calwork_days(dt):
+        if not rewards.get_month_hired(dt): return 0;
+        return sum_for_month_days(dt,is_calwork_day_01)
+    def calwork_days_for_prev_6_months(dt):
+        return sum_for_prev_months( date_from, 6, sum_month_calwork_days )
+    
+    print 'emp',employee
+    for date_from, date_to in absences.by_type['bo']:
+        rec = AD()
+        days = (date_to - date_from).days + 1
+        rec.pdays = 5 if days > 7 else days - 3 if days > 3 else 0
+        rec.r6 = reward_for_prev_6_months(date_from)
+        rec.cd6 = calwork_days_for_prev_6_months(date_from)
+        rec.reward_per_day = rec.r6 / rec.cd6
+        rec.to_pay = rec.reward_per_day * rec.pdays * 0.7
+        print rec
+        
 def main():
     formats = AD()
     fill_formats(formats)
@@ -184,8 +224,6 @@ def main():
     res.absence = absence_keeper()
     res.reward = reward_keeper()
     
-    
-    
     for fn in os.listdir(pre):
         if fn.endswith('.csv'):
             read_csv(pre+'/'+fn,formats,res)
@@ -193,16 +231,21 @@ def main():
     for employee, rewards in res.reward.by_employee.iteritems():
         if employee not in res.absence.by_employee: continue
         absences = res.absence.by_employee[employee] 
-        
-        for date_from, date_to in absences.by_type['bo']
-            days = (date_to - date_from).days + 1
-            pdays = 5 if days > 7 else days - 3 if days > 3 else 0
+        calc_absence_upkeep_for_employee(res.holiday,employee,rewards,absences)
     
-"""
+    
+    
+    """
+    print sum_for_prev_months(curr_date,1,sum_month_work_days)
+    print sum_for_prev_months(curr_date,2,sum_month_work_days)
+    print sum_for_prev_months(curr_date,4,sum_month_work_days)
+    print sum_for_prev_months(curr_date,6,sum_month_work_days)
+    """
+        
     from pprint import pprint
-    pprint(res.holiday.dt2free)
-    pprint(res.absence.by_employee['Testing'].dt2free)
-    pprint(res.absence.by_employee['Testing'].list  )
+    #pprint(res.holiday.dt2free)
+    #pprint(res.absence.by_employee['Testing'].dt2free)
+    #pprint(res.absence.by_employee['Testing'].by_type  )
     pprint(res.reward.by_employee['Testing'].mon2reward  )
-"""
+
 if __name__ == "__main__": main()
