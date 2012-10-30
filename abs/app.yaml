@@ -1,0 +1,16 @@
+application: ergo-abs
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: no
+
+handlers:
+- url: /run\.js
+  static_files: run.js
+  upload: run\.js
+- url: .*
+  script: step6.py
+
+libraries:
+- name: webapp2
+  version: "2.5.1"
